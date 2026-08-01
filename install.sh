@@ -120,3 +120,32 @@ if command -v opencode >/dev/null 2>&1; then
 else
   echo "  opencode が未インストールです。 https://opencode.ai から導入してください。"
 fi
+
+cat <<'TUTORIAL'
+
+■ はじめに（簡単な使い方）
+────────────────────────────────────────
+① 解析したい .xlsm があるディレクトリで opencode を起動
+      cd <対象のフォルダ>
+      opencode
+
+② 起動したら、解析したいファイルを伝えるだけでスキルが自動発動します
+      「zaiko.xlsm の業務を分析して、新システムの要求仕様書を作成して」
+
+③ 出力されるもの
+  ・ 抽出成果物（解析材料）: <作業ディレクトリ>/
+      00_workbook_overview.md, 10_sheet_list.md, 20_vba_summary.md,
+      25_forms.md, 30_buttons.md, 40_cross_references.md,
+      sheets/*.md, vba/*.txt
+  ・ 最終レポート: 対象ファイルと同じ場所に
+      <対象名>_業務分析_要求仕様.md
+      （業務フロー / データモデル / Excelの制約の読み解き /
+        機能・非機能・DB・画面・帳票要件 / 要確認事項）
+
+④ 抽出だけを手動で行う場合
+      python3 <スキル>/scripts/extract.py <対象.xlsm> -o <作業ディレクトリ>
+
+⑤ Access DB (.accdb) 連携ツールの場合は --with-db で再インストール
+      curl -fsSL https://raw.githubusercontent.com/kuwa2005/ExcelSpecification/main/install.sh | bash -s -- --with-db
+────────────────────────────────────────
+TUTORIAL
