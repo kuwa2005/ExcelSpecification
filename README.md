@@ -32,40 +32,20 @@ pip install openpyxl oletools access_parser
 
 ## インストール（別PCでスキルとして利用する手順）
 
-### 1. リポジトリを取得
+詳細は **[INSTALL.md](INSTALL.md)** を参照してください。
 
 ```bash
-git clone https://github.com/<あなたのユーザー名>/ExcelSpecification.git
-```
+# 1. 取得
+git clone https://github.com/kuwa2005/ExcelSpecification.git
 
-### 2. スキルを配置
-
-opencode は `.opencode/skills/` 配下のスキルを自動的に認識します。
-
-**プロジェクト単位**（リポジトリ配下のプロジェクトで使う場合）:
-
-```bash
-mkdir -p .opencode/skills
-cp -r ExcelSpecification/.opencode/skills/xlsm2spec .opencode/skills/
-```
-
-**全プロジェクトで使う場合（グローバル）**:
-
-```bash
+# 2. グローバル配置（全プロジェクトで利用可）
 mkdir -p ~/.config/opencode/skills
 cp -r ExcelSpecification/.opencode/skills/xlsm2spec ~/.config/opencode/skills/
-```
 
-### 3. 依存パッケージの導入
-
-```bash
+# 3. 依存導入
 pip install openpyxl oletools
-```
 
-### 4. 動作確認
-
-```bash
-python3 -c "import openpyxl, oletools"
+# 4. opencode を再起動 → 解析対象の .xlsm を渡すと自動発動
 ```
 
 ## 使い方
@@ -102,6 +82,7 @@ python3 .opencode/skills/xlsm2spec/scripts/extract.py <対象.xlsm> -o <作業�
 ```
 .
 ├── README.md
+├── INSTALL.md                # 別PCでのインストール手順
 └── .opencode/
     └── skills/
         └── xlsm2spec/          # このスキル本体
