@@ -590,6 +590,147 @@ def conditional_formats(ws):
     return out
 
 
+def read_app_props(zpath):
+    """docProps/app.xml から編集時間・アプリ情報を返す。資産規模把握に使う。"""
+    root = read_zip_xml(zpath, "docProps/app.xml")
+    if root is None:
+        return {}
+    out = {}
+    for child in root:
+        tag = child.tag.split("}")[-1]
+        if tag in ("Application", "TotalTime", "Company", "Template"):
+            out[tag] = (child.text or "").strip()
+    return out
+
+
+def external_links(zpath):
+    """外部リンク（他ブック参照）の対象パス一覧を返す。他システム連携の手がかり。"""
+    import zipfile
+    import re as _re
+    links = []
+    try:
+        with zipfile.ZipFile(zpath) as z:
+            names = set(z.namelist())
+            for entry in sorted(names):
+                if not _re.match(r"xl/externalLinks/externalLink\d+\.xml$", entry):
+                    continue
+                try:
+                    content = z.read(entry).decode("utf-8", errors="replace")
+                except KeyError:
+                    continue
+                base = _re.match(r"(xl/externalLinks/externalLink\d+)", entry).group(1)
+                for t in _re.findall(r'link="([^"]*)"', content):
+                    if t not in links:
+                        links.append(t)
+                rels_name = base + ".rels"
+                if rels_name in names:
+                    rc = z.read(rels_name).decode("utf-8", errors="replace")
+                    for t in _re.findall(r'Target="([^"]*)"', rc):
+                        if t not in links:
+                            links.append(t)
+    except Exception:
+        pass
+    return links
+
+
+def editable_columns(ws, sample_rows=8):
+    """シート保護時の編集可能（ロック解除）な列を返す。入力可能列の特定に使う。"""
+    from openpyxl.utils import get_column_letter
+    out = []
+    for col in range(1, min(ws.max_column, 30) + 1):
+        unlocked = 0
+        for r in range(1, min(ws.max_row, sample_rows) + 1):
+            cell = ws.cell(row=r, column=col)
+            if cell.protection is not None and not cell.protection.locked:
+                unlocked += 1
+        if unlocked:
+            out.append(get_column_letter(col))
+    return out
+
+
+def sheet_hyperlinks(ws):
+    """シート上のハイパーリンク一覧（画面遷移・参照の手がかり）。"""
+    out = []
+    try:
+        for ref, hl in ws._hyperlinks.items():
+            tgt = hl.target or hl.location
+            if tgt:
+                out.append((ref, tgt))
+    except Exception:
+        pass
+    return out
+
+
+def _split_concat(buf):
+    """文字列連結式を & で分割する。括弧/クォート内の & は無視（深さ追跡）。"""
+    parts, cur = [], []
+    depth, i = 0, 0
+    while i < len(buf):
+        c = buf[i]
+        if c == '"':
+            cur.append(c)
+            i += 1
+            while i < len(buf) and buf[i] != '"':
+                cur.append(buf[i])
+                i += 1
+            if i < len(buf):
+                cur.append(buf[i])
+                i += 1
+            continue
+        if c == "(":
+            depth += 1
+        elif c == ")":
+            depth = max(0, depth - 1)
+        if c == "&" and depth == 0:
+            parts.append("".join(cur))
+            cur = []
+            i += 1
+            continue
+        cur.append(c)
+        i += 1
+    if cur:
+        parts.append("".join(cur))
+    return parts
+
+
+def _is_literal(seg):
+    """セグメント全体が1つの文字列リテラルならTrue。"""
+    s = seg.strip()
+    if len(s) < 2 or not s.startswith('"'):
+        return False
+    return s.endswith('"')
+
+
+def vba_sql_statements(code):
+    """sql変数への代入文から文字列連結(& と _改行継続)を再構成してSQLを抽出する。
+    変数は `{式}` のプレースホルダとして残す（値は実行時まで不明のため）。"""
+    out = []
+    lines = code.splitlines()
+    n = len(lines)
+    i = 0
+    while i < n:
+        m = re.match(r"^\s*(?:sql|SQL|strSQL|q)\s*=\s*(.+)$", lines[i])
+        if not m:
+            i += 1
+            continue
+        buf = m.group(1)
+        while buf.rstrip().endswith("& _") and i + 1 < n:
+            i += 1
+            buf += " " + lines[i]
+        joined = ""
+        for seg in _split_concat(buf):
+            seg = seg.strip()
+            if _is_literal(seg):
+                joined += seg[1:-1].replace('""', '"')
+            elif seg:
+                joined += "{%s}" % re.sub(r"\s+", " ", seg)
+        joined = joined.strip()
+        if joined and re.search(r"\b(SELECT|INSERT|UPDATE|DELETE)\b", joined, re.IGNORECASE):
+            out.append(joined)
+        i += 1
+    return out
+
+
 def analyze_sheet(wb, ws, sheet_buttons, sheet_names, code_names):
     """openpyxlのワークシートから構造詳細をMarkdown文字列で返す。"""
     L = []
@@ -598,6 +739,14 @@ def analyze_sheet(wb, ws, sheet_buttons, sheet_names, code_names):
     L.append(f"- フリーズペイン: `{ws.freeze_panes}`")
     L.append(f"- オートフィルタ: `{ws.auto_filter.ref}`")
     L.append(f"- シート保護: {ws.protection.sheet}")
+    if ws.protection.sheet:
+        if ws.protection.password:
+            L.append("- 保護パスワード: **あり**")
+        edit_cols = editable_columns(ws)
+        if edit_cols:
+            L.append(f"- 編集可能な列（保護中の入力可能列）: {', '.join(edit_cols)}")
+        else:
+            L.append("- 編集可能なセル: なし（全面保護）")
     L.append(f"- 結合セル: {len(ws.merged_cells.ranges)} 件")
     L.append(f"- タブ色: {ws.sheet_properties.tabColor.rgb if ws.sheet_properties.tabColor else 'なし'}")
     L.append(f"- 印刷範囲: {getattr(ws, 'print_area', None)}")
@@ -703,6 +852,14 @@ def analyze_sheet(wb, ws, sheet_buttons, sheet_names, code_names):
         L.append("|---|---|---|---|---|")
         for c in cfs:
             L.append(f"| {c['sqref']} | {c['type']} | {c['op'] or '-'} | `{c['formula']}` | {c['dxf'] or '-'} |")
+        L.append("")
+
+    # ハイパーリンク（画面遷移・他ブック参照の手がかり）
+    hls = sheet_hyperlinks(ws)
+    if hls:
+        L.append("**ハイパーリンク**\n")
+        for ref, tgt in hls:
+            L.append(f"- `{ref}` → `{tgt}`")
         L.append("")
 
     # コメント
@@ -971,6 +1128,8 @@ def make_report(out, wb_path, zpath, db_path=None):
 
     props = wb.properties
     size = os.path.getsize(wb_path)
+    app_props = read_app_props(zpath)
+    ext_links = external_links(zpath)
 
     with open(os.path.join(out, "00_workbook_overview.md"), "w", encoding="utf-8") as f:
         f.write("# ワークブック概要\n\n")
@@ -982,6 +1141,24 @@ def make_report(out, wb_path, zpath, db_path=None):
         f.write(f"- 最終更新者: {props.lastModifiedBy}\n")
         f.write(f"- 作成日: {props.created}\n")
         f.write(f"- 更新日: {props.modified}\n")
+        if "TotalTime" in app_props:
+            try:
+                hrs = int(app_props["TotalTime"]) / 3600
+                f.write(f"- 総編集時間: {hrs:.1f} 時間 (TotalTime)\n")
+            except Exception:
+                f.write(f"- TotalTime: {app_props['TotalTime']}\n")
+        if app_props.get("Application"):
+            f.write(f"- 作成アプリ: {app_props['Application']}\n")
+        if app_props.get("Company"):
+            f.write(f"- 会社: {app_props['Company']}\n")
+        if app_props.get("Template"):
+            f.write(f"- テンプレート: {app_props['Template']}\n")
+        f.write("\n## 外部リンク（他ブック参照）\n\n")
+        if ext_links:
+            for t in ext_links:
+                f.write(f"- `{t}`\n")
+        else:
+            f.write("(なし)\n")
         f.write("\n## シート構成\n\n")
         f.write("| # | シート名 | sheetId | マクロ有無 | ボタン数 |\n")
         f.write("|---|---|---|---|---|\n")
@@ -1093,6 +1270,34 @@ def make_report(out, wb_path, zpath, db_path=None):
                 tables[m.group(1)] += 1
         for t, cnt in tables.most_common():
             f.write(f"- `{t}` ({cnt}回)\n")
+
+        # エラー処理方針 (On Error)
+        f.write("\n## エラー処理方針 (On Error)\n\n")
+        err_counts = Counter()
+        err_snippets = []
+        for mname, ftype, code in vba_mods:
+            for m in re.finditer(r"On Error\s+(GoTo\s+\w+|Resume Next|GoTo 0)", code, re.IGNORECASE):
+                err_counts[m.group(1)] += 1
+            for m in re.finditer(r"On Error\s+(GoTo\s+\w+)", code, re.IGNORECASE):
+                lbl = m.group(1).split()[1]
+                end = code.find("Exit Sub", m.end())
+                end = end if end != -1 else code.find("Exit Function", m.end())
+                end = end if end != -1 else len(code)
+                seg = code[m.end():end]
+                if re.search(r"MsgBox", seg, re.IGNORECASE):
+                    err_snippets.append((mname, lbl, "MsgBox表示"))
+                elif re.search(r"Resume", seg, re.IGNORECASE):
+                    err_snippets.append((mname, lbl, "Resume継続"))
+                else:
+                    err_snippets.append((mname, lbl, "無視/その他"))
+        for e, c in err_counts.most_common():
+            f.write(f"- `On Error {e}` ... {c}箇所\n")
+        if err_snippets:
+            f.write("\nハンドラ内の処理傾向:\n")
+            for mname, lbl, how in sorted(set(err_snippets)):
+                f.write(f"- `{mname}` ({lbl}) → {how}\n")
+        if not err_counts:
+            f.write("(On Error なし)\n")
 
         f.write("\n## メッセージ一覧 (MsgBox)\n\n")
         msgs = []
@@ -1207,6 +1412,20 @@ def make_report(out, wb_path, zpath, db_path=None):
                 f.write(f"- `{mname}`: OpenDatabase({m.group(1)})\n")
             for m in re.finditer(r'cn\.Execute\s*\(?\s*"([^"]+)"', code):
                 f.write(f"- `{mname}`: cn.Execute(\"{m.group(1)}\")\n")
+
+        # SQL文の再構成（文字列連結 & と改行継続 _ を復元）
+        f.write("\n## SQL文の再構成\n\n")
+        f.write("`sql = \"...\" & var & ...` 形式の文字列連結SQLを復元したもの。\n")
+        f.write("業務テーブルの取得・更新・抽出条件の理解に使う。\n\n")
+        for mname, ftype, code in vba_mods:
+            stmts = vba_sql_statements(code)
+            for s in stmts:
+                first = s.splitlines()[0] if s else ""
+                kw = "UPDATE" if re.search(r"\bUPDATE\b", s, re.I) else (
+                    "INSERT" if re.search(r"\bINSERT\b", s, re.I) else (
+                    "DELETE" if re.search(r"\bDELETE\b", s, re.I) else (
+                    "SELECT" if re.search(r"\bSELECT\b", s, re.I) else "その他")))
+                f.write(f"- `{mname}` [{kw}] `{first}`\n")
 
     # ---- シート詳細 ----
     for i, (name, sid, rid) in enumerate(sheets, 1):
