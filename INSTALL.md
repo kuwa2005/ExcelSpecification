@@ -11,12 +11,7 @@ curl -fsSL -H "Accept: application/vnd.github.raw" https://api.github.com/repos/
 ```
 
 - スキルをグローバル（`~/.config/opencode/skills/`）に配置します
-- openpyxl / oletools を自動導入します
-- Access DB連携ツールを解析する場合は `--with-db` を付与:
-
-```bash
-curl -fsSL -H "Accept: application/vnd.github.raw" https://api.github.com/repos/kuwa2005/ExcelSpecification/contents/install.sh | bash -s -- --with-db
-```
+- openpyxl / oletools / access_parser を自動導入します（Access DB連携ツールもデフォルトで解析可能）
 
 - 特定プロジェクトだけで使う場合:
 
@@ -29,7 +24,6 @@ curl -fsSL -H "Accept: application/vnd.github.raw" https://api.github.com/repos/
 | オプション | 説明 |
 |---|---|
 | `--project <dir>` | プロジェクト単位（`<dir>/.opencode/skills/`）でインストール |
-| `--with-db` | Access DB解析用の `access_parser` も導入 |
 | `--skip-deps` | Python依存の導入をスキップ |
 | `--no-check` | import 検証をスキップ |
 
@@ -88,21 +82,17 @@ cd ExcelSpecification
 ## 4. Python依存パッケージの導入
 
 ```bash
-pip install openpyxl oletools
+pip install openpyxl oletools access_parser
 ```
 
 - `oletools`（含む `olefile`）: VBAプロジェクト（vbaProject.bin）の解析に必須
 - `openpyxl`: シート構造の解析に必須
-- `access_parser`: **Access DB（.accdb/.mdb）連携ツール**を解析する場合のみ追加
-
-```bash
-pip install access_parser
-```
+- `access_parser`: Access DB（.accdb/.mdb）連携ツールのスキーマ解析に使用
 
 検証:
 
 ```bash
-python3 -c "import openpyxl, oletools"
+python3 -c "import openpyxl, oletools, access_parser"
 ```
 
 ## 5. 動作確認
@@ -131,6 +121,8 @@ opencode のセッション内で、解析対象の `.xlsm` を渡すとスキ�
 
 ```bash
 python3 ~/.config/opencode/skills/xlsm2spec/scripts/extract.py <対象.xlsm> -o <出力ディレクトリ>
+# Access DB連携ツールなら --db で実スキーマも検証
+python3 ~/.config/opencode/skills/xlsm2spec/scripts/extract.py <対象.xlsm> -o <出力ディレクトリ> --db data.accdb
 ```
 
 ## 7. 更新方法

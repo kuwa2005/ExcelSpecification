@@ -6,7 +6,6 @@
 #
 # options:
 #   --project <dir>   プロジェクト単位でインストール (<dir>/.opencode/skills)
-#   --with-db         Access DB 解析用の access_parser も導入
 #   --skip-deps       Python 依存の導入をスキップ
 #   --no-check        検証 (import 確認) をスキップ
 #
@@ -14,9 +13,7 @@ set -euo pipefail
 
 REPO_URL="https://github.com/kuwa2005/ExcelSpecification.git"
 SKILL_REL=".opencode/skills/xlsm2spec"
-CORE_DEPS="openpyxl oletools"
-DB_DEPS="access_parser"
-WITH_DB=0
+CORE_DEPS="openpyxl oletools access_parser"
 SKIP_DEPS=0
 NO_CHECK=0
 TARGET="global"
@@ -33,7 +30,6 @@ while [ $# -gt 0 ]; do
       TARGET="$2"
       shift 2
       ;;
-    --with-db)    WITH_DB=1; shift ;;
     --skip-deps)  SKIP_DEPS=1; shift ;;
     --no-check)   NO_CHECK=1; shift ;;
     -h|--help)    usage; exit 0 ;;
@@ -74,9 +70,6 @@ echo "     配置先: $DEST"
 
 # ---- Python 依存 ----
 DEPS="$CORE_DEPS"
-if [ "$WITH_DB" = "1" ]; then
-  DEPS="$DEPS $DB_DEPS"
-fi
 if [ "$SKIP_DEPS" = "1" ]; then
   echo "[2/3] 依存の導入をスキップ"
 else
@@ -102,12 +95,10 @@ else
     echo "     [warn] import に失敗しました（依存導入の失敗が考えられます）"
     python3 -m pip list 2>/dev/null | grep -iE "openpyxl|oletools" || true
   fi
-  if [ "$WITH_DB" = "1" ]; then
-    if python3 -c "import access_parser" 2>/dev/null; then
-      echo "     access_parser: OK"
-    else
-      echo "     [warn] access_parser の import に失敗しました"
-    fi
+  if python3 -c "import access_parser" 2>/dev/null; then
+    echo "     access_parser: OK"
+  else
+    echo "     [warn] access_parser の import に失敗しました"
   fi
 fi
 
@@ -145,7 +136,8 @@ cat <<'TUTORIAL'
 ④ 抽出だけを手動で行う場合
       python3 <スキル>/scripts/extract.py <対象.xlsm> -o <作業ディレクトリ>
 
-⑤ Access DB (.accdb) 連携ツールの場合は --with-db で再インストール
-      curl -fsSL -H "Accept: application/vnd.github.raw" https://api.github.com/repos/kuwa2005/ExcelSpecification/contents/install.sh | bash -s -- --with-db
+⑤ Access DB (.accdb) 連携ツールもデフォルトで解析可能（access_parser 同梱）
+      抽出時に --db で実スキーマも検証:
+      python3 <スキル>/scripts/extract.py <対象.xlsm> -o <作業ディレクトリ> --db data.accdb
 ────────────────────────────────────────
 TUTORIAL

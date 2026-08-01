@@ -19,10 +19,10 @@ description: Excelマクロ資産(.xlsm/.xlam)を解析し、VBA・シート構�
 
 - 対象: `.xlsm` / `.xlam`（バイナリVBAを含むOpenXML形式）
 - 抽出スクリプト: `<スキル>/scripts/extract.py`
-- 依存: `openpyxl`, `oletools`（含む `olefile`）
-  - 未導入なら: `pip install openpyxl oletools`
-  - DB解析時（`.accdb`/`.mdb`）: `pip install access_parser`（純Python。MDBツール不要）
-  - 検証: `python3 -c "import openpyxl, oletools"`
+- 依存: `openpyxl`, `oletools`（含む `olefile`）, `access_parser`（Access DB解析用。純Python。MDBツール不要）
+  - `install.sh` では上記3つを**デフォルトで導入**する
+  - 手動導入なら: `pip install openpyxl oletools access_parser`
+  - 検証: `python3 -c "import openpyxl, oletools, access_parser"`
 
 ---
 

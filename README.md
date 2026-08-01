@@ -24,7 +24,7 @@
 - 依存パッケージ:
   - `openpyxl` — Excelファイルの解析
   - `oletools` — VBAプロジェクト（vbaProject.bin）の解析
-  - `access_parser` — Access DB（.accdb/.mdb）のスキーマ解析（DB連携ツールの場合のみ）
+  - `access_parser` — Access DB（.accdb/.mdb）のスキーマ解析
 
 ```bash
 pip install openpyxl oletools access_parser
@@ -38,12 +38,8 @@ pip install openpyxl oletools access_parser
 curl -fsSL -H "Accept: application/vnd.github.raw" https://api.github.com/repos/kuwa2005/ExcelSpecification/contents/install.sh | bash
 ```
 
-- スキルをグローバル（`~/.config/opencode/skills/`）に配置し、Python依存（openpyxl / oletools）も導入します
-- Access DB連携ツールを解析する場合は `--with-db` を付与
-
-```bash
-curl -fsSL -H "Accept: application/vnd.github.raw" https://api.github.com/repos/kuwa2005/ExcelSpecification/contents/install.sh | bash -s -- --with-db
-```
+- スキルをグローバル（`~/.config/opencode/skills/`）に配置し、Python依存（openpyxl / oletools / access_parser）も導入します
+- Access DB（.accdb/.mdb）連携ツールも**デフォルトで解析可能**です（`--db` で実スキーマを検証）
 
 - 特定プロジェクトだけで使う場合は `--project <dir>` を付与
 
@@ -64,7 +60,7 @@ mkdir -p ~/.config/opencode/skills
 cp -r ExcelSpecification/.opencode/skills/xlsm2spec ~/.config/opencode/skills/
 
 # 3. 依存導入
-pip install openpyxl oletools
+pip install openpyxl oletools access_parser
 
 # 4. opencode を再起動 → 解析対象の .xlsm を渡すと自動発動
 ```
@@ -81,6 +77,8 @@ opencode のセッション内で、解析対象の `.xlsm` パスを伝える�
 
 ```bash
 python3 .opencode/skills/xlsm2spec/scripts/extract.py <対象.xlsm> -o <作業ディレクトリ>
+# Access DB連携ツールなら --db で実スキーマも検証
+python3 .opencode/skills/xlsm2spec/scripts/extract.py <対象.xlsm> -o <作業ディレクトリ> --db data.accdb
 ```
 
 ### 生成される成果物
@@ -93,6 +91,7 @@ python3 .opencode/skills/xlsm2spec/scripts/extract.py <対象.xlsm> -o <作業�
 | `25_forms.md` | UserFormのコントロール・種別・イベント・プロパティ |
 | `30_buttons.md` | ボタン→マクロ→定義モジュール割当 |
 | `40_cross_references.md` | VBA↔シート↔DBのクロス参照 |
+| `50_db_schema.md` | Access DBのスキーマ検証とVBA参照の突合（`--db` 指定時のみ） |
 | `sheets/*.md` | シートごとの列・数式・検証・コメント |
 | `vba/*.txt` | VBAモジュールの完全ソース |
 
