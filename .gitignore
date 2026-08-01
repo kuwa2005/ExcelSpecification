@@ -1,6 +1,6 @@
 # サンプル資産（在庫管理）はリポジトリに含めない
-# zaiko.xlsm: 解析サンプルのExcelマクロブック
-/zaiko.xlsm
+# example.xlsm: 解析サンプルのExcelマクロブック
+/example.xlsm
 # data.accdb: 解析サンプルのAccess DB
 /data.accdb
 # サンプルから生成した業務分析レポート

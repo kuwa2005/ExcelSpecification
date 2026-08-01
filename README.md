@@ -114,4 +114,4 @@ python3 .opencode/skills/xlsm2spec/scripts/extract.py <対象.xlsm> -o <作業�
 
 ## ライセンス
 
-このリポジトリに含まれるサンプル資産（zaiko.xlsm / data.accdb）は外部に公開しません（.gitignore で除外）。スキル本体（SKILL.md / extract.py）は自由に利用してください。
+このリポジトリに含まれるサンプル資産（example.xlsm / data.accdb）は外部に公開しません（.gitignore で除外）。スキル本体（SKILL.md / extract.py）は自由に利用してください。
