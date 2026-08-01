@@ -168,7 +168,7 @@ cat <<'TUTORIAL'
       「example.xlsm の業務を分析して、新システムの要求仕様書を作成して」
 
 ③ 出力されるもの
-  ・ 抽出成果物（解析材料）: <作業ディレクトリ>/
+  ・ 抽出成果物（解析材料）: カレントディレクトリの ./.tmp/
       00_workbook_overview.md, 10_sheet_list.md, 20_vba_summary.md,
       25_forms.md, 30_buttons.md, 40_cross_references.md,
       sheets/*.md, vba/*.txt
@@ -178,10 +178,11 @@ cat <<'TUTORIAL'
         機能・非機能・DB・画面・帳票要件 / 要確認事項）
 
 ④ 抽出だけを手動で行う場合
-      python3 <スキル>/scripts/extract.py <対象.xlsm> -o <作業ディレクトリ>
+      mkdir -p ./.tmp
+      python3 <スキル>/scripts/extract.py <対象.xlsm> -o ./.tmp
 
 ⑤ Access DB (.accdb) 連携ツールもデフォルトで解析可能（access_parser 同梱）
       抽出時に --db で実スキーマも検証:
-      python3 <スキル>/scripts/extract.py <対象.xlsm> -o <作業ディレクトリ> --db data.accdb
+      python3 <スキル>/scripts/extract.py <対象.xlsm> -o ./.tmp --db data.accdb
 ────────────────────────────────────────
 TUTORIAL

@@ -121,10 +121,13 @@ opencode のセッション内で、解析対象の `.xlsm` を渡すとスキ�
 抽出のみを手動で実行する場合:
 
 ```bash
-python3 ~/.config/opencode/skills/xlsm2spec/scripts/extract.py <対象.xlsm> -o <出力ディレクトリ>
+mkdir -p ./.tmp
+python3 ~/.config/opencode/skills/xlsm2spec/scripts/extract.py <対象.xlsm> -o ./.tmp
 # Access DB連携ツールなら --db で実スキーマも検証
-python3 ~/.config/opencode/skills/xlsm2spec/scripts/extract.py <対象.xlsm> -o <出力ディレクトリ> --db data.accdb
+python3 ~/.config/opencode/skills/xlsm2spec/scripts/extract.py <対象.xlsm> -o ./.tmp --db data.accdb
 ```
+
+> 解析成果物（材料）は**カレントディレクトリの `./.tmp/`** に出力されます（`/tmp` 等の外部ディレクトリは使わない）。
 
 ## 7. 更新方法
 
