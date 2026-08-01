@@ -127,12 +127,24 @@ python3 ~/.config/opencode/skills/xlsm2spec/scripts/extract.py <対象.xlsm> -o 
 
 ## 7. 更新方法
 
+### A. 一発インストールを再実行（簡単・推奨）
+
+**同じ1行コマンドを再実行するだけで最新版へアップデート**されます（スキルを毎回取り直して全置換、依存も再確認）。
+
+```bash
+curl -fsSL -H "Accept: application/vnd.github.raw" https://api.github.com/repos/kuwa2005/ExcelSpecification/contents/install.sh | bash
+```
+
+### B. git pull で手動更新
+
 ```bash
 git -C ExcelSpecification pull
 # グローバル配置の場合は再コピー
 cp -r ExcelSpecification/.opencode/skills/xlsm2spec ~/.config/opencode/skills/
 # opencode を再起動
 ```
+
+※どちらの方法でも、配置先の手動カスタマイズは上書きされます。更新後は opencode を再起動してください。
 
 ## トラブルシューティング
 

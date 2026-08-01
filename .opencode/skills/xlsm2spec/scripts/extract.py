@@ -489,6 +489,107 @@ def format_cell(value):
     return s.replace("\n", "⏎")
 
 
+PAPER_SIZES = {0: "既定", 1: "Letter", 8: "A3", 9: "A4", 11: "A4(小)", 5: "Legal", 7: "B4", 12: "B5"}
+
+
+def header_text(item):
+    """HeaderFooter項目(left/center/right)のテキストを集約する。"""
+    if item is None:
+        return ""
+    parts = []
+    for pos in ("left", "center", "right"):
+        sub = getattr(item, pos, None)
+        if sub is not None and sub.text:
+            parts.append("%s=%s" % (pos, sub.text))
+    return " | ".join(parts)
+
+
+def print_settings_desc(ws):
+    """ページ設定(PageSetup)の要約を返す。帳票仕様の把握に使う。"""
+    ps = ws.page_setup
+    pm = ws.page_margins
+    out = []
+    if ps is not None:
+        if ps.orientation:
+            out.append("向き=%s" % ps.orientation)
+        if ps.paperSize:
+            out.append("用紙=%s" % PAPER_SIZES.get(ps.paperSize, "コード%s" % ps.paperSize))
+        if ps.scale and ps.scale != 100:
+            out.append("倍率=%s%%" % ps.scale)
+        if ps.fitToWidth:
+            out.append("横=%dページ幅に収める" % ps.fitToWidth)
+        if ps.fitToHeight:
+            out.append("縦=%dページ高さに収める" % ps.fitToHeight)
+    if ws.print_area:
+        out.append("印刷範囲=%s" % ws.print_area)
+    if ws.print_title_rows:
+        out.append("タイトル行=%s" % ws.print_title_rows)
+    if ws.print_title_cols:
+        out.append("タイトル列=%s" % ws.print_title_cols)
+    if pm is not None:
+        m = []
+        for name in ("left", "right", "top", "bottom", "header", "footer"):
+            v = getattr(pm, name)
+            if v is not None:
+                m.append("%s=%s" % (name, v))
+        if m:
+            out.append("余白: " + ", ".join(m))
+    hd = header_text(ws.oddHeader) or header_text(ws.evenHeader)
+    ft = header_text(ws.oddFooter) or header_text(ws.evenFooter)
+    if hd:
+        out.append("ヘッダー: " + hd)
+    if ft:
+        out.append("フッター: " + ft)
+    return out
+
+
+def dxf_desc(dxf):
+    """条件付き書式の書式(DifferentialStyle)を要約する。"""
+    if dxf is None:
+        return ""
+    parts = []
+    try:
+        f = dxf.font
+        if f is not None:
+            c = f.color
+            if c is not None and getattr(c, "rgb", None):
+                parts.append("font=%s" % c.rgb)
+            if f.bold:
+                parts.append("太字")
+    except Exception:
+        pass
+    try:
+        fill = dxf.fill
+        if fill is not None:
+            c = fill.fgColor
+            if c is not None and getattr(c, "rgb", None):
+                parts.append("塗り=%s" % c.rgb)
+    except Exception:
+        pass
+    return ",".join(parts)
+
+
+def conditional_formats(ws):
+    """条件付き書式ルールの一覧を返す。色分けが業務ステータスの視覚表現になっていることに注意。"""
+    out = []
+    try:
+        cfs = ws.conditional_formatting
+    except Exception:
+        return out
+    for cf in cfs:
+        sqref = str(cf.sqref)
+        for rule in cf.rules:
+            formula = "; ".join(rule.formula) if rule.formula else ""
+            op = getattr(rule, "operator", None) or ""
+            try:
+                d = dxf_desc(getattr(rule, "dxf", None))
+            except Exception:
+                d = ""
+            out.append({"sqref": sqref, "type": rule.type, "op": op,
+                        "formula": formula, "dxf": d})
+    return out
+
+
 def analyze_sheet(wb, ws, sheet_buttons, sheet_names, code_names):
     """openpyxlのワークシートから構造詳細をMarkdown文字列で返す。"""
     L = []
@@ -584,6 +685,24 @@ def analyze_sheet(wb, ws, sheet_buttons, sheet_names, code_names):
         L.append("**データ検証（入力規制）**\n")
         for d in dvs:
             L.append(f"- 種類={d['type']} 範囲=`{d['sqref']}` formula1=`{d['formula1']}` formula2=`{d['formula2']}` blankOK={d['allow_blank']}")
+        L.append("")
+
+    # 印刷設定（帳票仕様の要）
+    print_info = print_settings_desc(ws)
+    if print_info:
+        L.append("**印刷設定**\n")
+        for p in print_info:
+            L.append(f"- {p}")
+        L.append("")
+
+    # 条件付き書式（色分け = 業務ステータスの視覚表現）
+    cfs = conditional_formats(ws)
+    if cfs:
+        L.append("**条件付き書式**\n")
+        L.append("| 範囲 | 種類 | 演算子/条件 | 数式 | 書式 |")
+        L.append("|---|---|---|---|---|")
+        for c in cfs:
+            L.append(f"| {c['sqref']} | {c['type']} | {c['op'] or '-'} | `{c['formula']}` | {c['dxf'] or '-'} |")
         L.append("")
 
     # コメント

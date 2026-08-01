@@ -111,6 +111,7 @@ if command -v opencode >/dev/null 2>&1; then
 else
   echo "  opencode が未インストールです。 https://opencode.ai から導入してください。"
 fi
+echo "  ※同じコマンドを再実行すると最新版にアップデートされます"
 
 cat <<'TUTORIAL'
 

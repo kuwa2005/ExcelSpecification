@@ -40,6 +40,7 @@ curl -fsSL -H "Accept: application/vnd.github.raw" https://api.github.com/repos/
 
 - スキルをグローバル（`~/.config/opencode/skills/`）に配置し、Python依存（openpyxl / oletools / access_parser）も導入します
 - Access DB（.accdb/.mdb）連携ツールも**デフォルトで解析可能**です（`--db` で実スキーマを検証）
+- **同じコマンドを再実行すると最新版へアップデート**されます
 
 - 特定プロジェクトだけで使う場合は `--project <dir>` を付与
 
@@ -92,7 +93,7 @@ python3 .opencode/skills/xlsm2spec/scripts/extract.py <対象.xlsm> -o <作業�
 | `30_buttons.md` | ボタン→マクロ→定義モジュール割当 |
 | `40_cross_references.md` | VBA↔シート↔DBのクロス参照 |
 | `50_db_schema.md` | Access DBのスキーマ検証とVBA参照の突合（`--db` 指定時のみ） |
-| `sheets/*.md` | シートごとの列・数式・検証・コメント |
+| `sheets/*.md` | シートごとの列・数式・検証・コメント・印刷設定・条件付き書式・ボタン |
 | `vba/*.txt` | VBAモジュールの完全ソース |
 
 最終成果物として `<対象名>_業務分析_要求仕様.md`（業務分析 / 制約の読み解き / 要求仕様 / 要確認事項）を生成します。
