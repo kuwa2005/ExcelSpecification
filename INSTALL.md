@@ -7,7 +7,7 @@
 下記の1行で、スキルの配置とPython依存の導入まで完了します。
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kuwa2005/ExcelSpecification/main/install.sh | bash
+curl -fsSL https://cdn.jsdelivr.net/gh/kuwa2005/ExcelSpecification@main/install.sh | bash
 ```
 
 - スキルをグローバル（`~/.config/opencode/skills/`）に配置します
@@ -15,13 +15,13 @@ curl -fsSL https://raw.githubusercontent.com/kuwa2005/ExcelSpecification/main/in
 - Access DB連携ツールを解析する場合は `--with-db` を付与:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kuwa2005/ExcelSpecification/main/install.sh | bash -s -- --with-db
+curl -fsSL https://cdn.jsdelivr.net/gh/kuwa2005/ExcelSpecification@main/install.sh | bash -s -- --with-db
 ```
 
 - 特定プロジェクトだけで使う場合:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kuwa2005/ExcelSpecification/main/install.sh | bash -s -- --project ./myproject
+curl -fsSL https://cdn.jsdelivr.net/gh/kuwa2005/ExcelSpecification@main/install.sh | bash -s -- --project ./myproject
 ```
 
 インストールスクリプトのオプション:
