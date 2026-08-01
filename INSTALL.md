@@ -2,6 +2,39 @@
 
 このスキルを**別のPC**で使うための手順です。開いている端末でopencodeを起動したまま作業しないでください（設定は起動時に読み込まれます。配置後は**opencodeを再起動**します）。
 
+## 0. 一発インストール（推奨）
+
+下記の1行で、スキルの配置とPython依存の導入まで完了します。
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kuwa2005/ExcelSpecification/main/install.sh | bash
+```
+
+- スキルをグローバル（`~/.config/opencode/skills/`）に配置します
+- openpyxl / oletools を自動導入します
+- Access DB連携ツールを解析する場合は `--with-db` を付与:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kuwa2005/ExcelSpecification/main/install.sh | bash -s -- --with-db
+```
+
+- 特定プロジェクトだけで使う場合:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kuwa2005/ExcelSpecification/main/install.sh | bash -s -- --project ./myproject
+```
+
+インストールスクリプトのオプション:
+
+| オプション | 説明 |
+|---|---|
+| `--project <dir>` | プロジェクト単位（`<dir>/.opencode/skills/`）でインストール |
+| `--with-db` | Access DB解析用の `access_parser` も導入 |
+| `--skip-deps` | Python依存の導入をスキップ |
+| `--no-check` | import 検証をスキップ |
+
+一発インストールを使わない場合の手動手順は以下を参照してください。
+
 ## 1. opencode のインストール（未導入の場合）
 
 公式ドキュメント <https://opencode.ai> の手順に従って opencode をインストールします（既に導入済みの場合はスキップ）。
