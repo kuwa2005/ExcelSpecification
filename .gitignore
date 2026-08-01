@@ -1,0 +1,15 @@
+# サンプル資産（在庫管理）はリポジトリに含めない
+# zaiko.xlsm: 解析サンプルのExcelマクロブック
+/zaiko.xlsm
+# data.accdb: 解析サンプルのAccess DB
+/data.accdb
+# サンプルから生成した業務分析レポート
+/zaiko_業務分析_要求仕様.md
+# ルートに配置したその他のサンプル
+/*.xlsm
+/*.accdb
+/*.mdb
+
+# Python
+__pycache__/
+*.pyc
