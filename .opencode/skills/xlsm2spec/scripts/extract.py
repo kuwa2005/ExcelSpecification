@@ -731,10 +731,92 @@ def vba_sql_statements(code):
     return out
 
 
+def _col_letter(index):
+    """0始まりの配列インデックスをシート列文字に変換 (index 0 -> A)。"""
+    try:
+        from openpyxl.utils import get_column_letter
+        return get_column_letter(index + 1)
+    except Exception:
+        return "?" * (index + 1)
+
+
+def _strip_vba_comment(s):
+    """VBAコメント('以降)を除去する。クォート文字列内の'は対象外。"""
+    in_str = False
+    for i, ch in enumerate(s):
+        if ch == '"':
+            in_str = not in_str
+        elif ch == "'" and not in_str:
+            return s[:i]
+    return s
+
+
+def vba_column_maps(code):
+    """4.2技法の自動化: 配列インデックス=シート列(0始まり)から列マッピングを復元する。
+    取り込み(in, DB/セル→シート): 二次元配列(w行, N) = ![フィールド] / Range("X"&行) の形
+    セット(out, シート→DB):       ![フィールド] = Range("X" & w行) 等の形
+    戻り値: (in_rows, out_rows)
+      in_rows:  [{"col": "B", "index": 1, "src": "DBフィールド:コード"}, ...]
+      out_rows: [{"field": "数量", "src": "シートE列"}, ...]
+    """
+    in_rows, out_rows = [], []
+    for line in code.splitlines():
+        s = line.strip()
+        m = re.match(r"([A-Za-z0-9_\u3000-\u9fff]+)\((?:w行|行|i|n|カウント),\s*(\d+)\)\s*=\s*(.+)", s)
+        if m:
+            idx = int(m.group(2))
+            rhs = _strip_vba_comment(m.group(3)).strip()
+            fld = re.search(r"!\[([^\]]+)\]", rhs)
+            if fld:
+                src = "DBフィールド:%s" % fld.group(1)
+            elif re.search(r"(w行|行|i|n)\s*\+\s*1", rhs):
+                src = "連番(行番号+1)"
+            elif re.search(r'Range\("([A-Za-z]+)', rhs):
+                src = "シート%s列" % re.search(r'Range\("([A-Za-z]+)', rhs).group(1)
+            elif re.search(r"\bCells\(", rhs):
+                src = "セル値"
+            else:
+                src = rhs
+            in_rows.append({"col": _col_letter(idx), "index": idx, "src": src})
+            continue
+        m = re.match(r"!\[([^\]]+)\]\s*=\s*(.+)", s)
+        if m and not re.match(r"(?:If|ElseIf|While|Select|Case)\b", s):
+            field = m.group(1)
+            rhs = _strip_vba_comment(m.group(2)).strip()
+            if "未入力の場合Null変換" in rhs:
+                cm = re.search(r'Range\("([A-Za-z]+)', rhs)
+                src = "Null変換(シート%s列)" % cm.group(1) if cm else "Null変換"
+            elif re.search(r'Range\("([A-Za-z]+)', rhs):
+                src = "シート%s列" % re.search(r'Range\("([A-Za-z]+)', rhs).group(1)
+            elif re.search(r"\bNow\b|\bDate\b", rhs):
+                src = "現在日付"
+            elif re.search(r"\bNull\b", rhs, re.IGNORECASE):
+                src = "Null(未設定)"
+            elif re.search(r"\bSheets\(", rhs):
+                src = "他シート値: %s" % rhs
+            else:
+                src = rhs
+            out_rows.append({"field": field, "src": src})
+    return in_rows, out_rows
+
+
+def commented_out(code):
+    """コメントアウトされたコード行（デッドコードの証拠）を返す。
+    Sub/Function/イベントハンドラ宣言がコメント中に残っているものを拾う。"""
+    out = []
+    for m in re.finditer(
+        r"^\s*'\s*(?:Public |Private )?(?:Sub|Function|Property)\s+"
+        r"([A-Za-z0-9_\u3000-\u9fff]+)",
+        code, re.MULTILINE):
+        out.append(m.group(1))
+    return sorted(set(out))
+
+
 def analyze_sheet(wb, ws, sheet_buttons, sheet_names, code_names):
     """openpyxlのワークシートから構造詳細をMarkdown文字列で返す。"""
     L = []
     L.append(f"## {ws.title}\n")
+    L.append(f"- シート状態: `{ws.sheet_state}`（hidden=非表示, veryHidden=完全非表示）")
     L.append(f"- 使用範囲: `{ws.dimensions}`  (最大行 {ws.max_row} / 最大列 {ws.max_column})")
     L.append(f"- フリーズペイン: `{ws.freeze_panes}`")
     L.append(f"- オートフィルタ: `{ws.auto_filter.ref}`")
@@ -1160,12 +1242,12 @@ def make_report(out, wb_path, zpath, db_path=None):
         else:
             f.write("(なし)\n")
         f.write("\n## シート構成\n\n")
-        f.write("| # | シート名 | sheetId | マクロ有無 | ボタン数 |\n")
-        f.write("|---|---|---|---|---|\n")
+        f.write("| # | シート名 | sheetId | 状態 | マクロ有無 | ボタン数 |\n")
+        f.write("|---|---|---|---|---|---|\n")
         for i, (name, sid, rid) in enumerate(sheets, 1):
             sn = "sheet%d" % i
             btns = btn_map.get(sn, [])
-            f.write(f"| {i} | {name} | {sid} | - | {len(btns)} |\n")
+            f.write(f"| {i} | {name} | {sid} | {wb[name].sheet_state} | - | {len(btns)} |\n")
         f.write("\n## 定義名 (Named Range / PrintArea)\n\n")
         names = []
         for n in wb.defined_names:
@@ -1183,8 +1265,8 @@ def make_report(out, wb_path, zpath, db_path=None):
     # ---- シート一覧 ----
     with open(os.path.join(out, "10_sheet_list.md"), "w", encoding="utf-8") as f:
         f.write("# シート一覧・役割推定\n\n")
-        f.write("| # | シート名 | 使用範囲 | フリーズ | オートフィルタ | 保護 | ボタン | 数式 | 役割推定 |\n")
-        f.write("|---|---|---|---|---|---|---|---|---|\n")
+        f.write("| # | シート名 | 状態 | 使用範囲 | フリーズ | オートフィルタ | 保護 | ボタン | 数式 | 役割推定 |\n")
+        f.write("|---|---|---|---|---|---|---|---|---|---|\n")
         for i, (name, sid, rid) in enumerate(sheets, 1):
             ws = wb[name]
             sn = "sheet%d" % i
@@ -1192,8 +1274,21 @@ def make_report(out, wb_path, zpath, db_path=None):
             fcount = sum(1 for row in ws.iter_rows()
                          for cell in row if isinstance(cell.value, str) and cell.value.startswith("="))
             role = guess_role(ws, btns, name)
-            f.write(f"| {i} | {name} | {ws.dimensions} | {ws.freeze_panes} | {ws.auto_filter.ref} | "
+            state = ws.sheet_state
+            if state != "visible":
+                role = "非表示(%s)" % state
+            f.write(f"| {i} | {name} | {state} | {ws.dimensions} | {ws.freeze_panes} | {ws.auto_filter.ref} | "
                     f"{ws.protection.sheet} | {len(btns)} | {fcount} | {role} |\n")
+
+        hidden = []
+        for n, _, _ in sheets:
+            if wb[n].sheet_state != "visible":
+                hidden.append((n, wb[n].sheet_state))
+        if hidden:
+            f.write("\n## 非表示シート\n\n")
+            for n, st in hidden:
+                f.write(f"- `{n}` ({st})\n")
+            f.write("\n非表示シートは参照用・過去バージョンの残骸の可能性がある。VBAからの参照有無を必ず確認する。\n")
 
     # ---- VBA ----
     vba_mods = extract_vba(wb_path)
@@ -1299,6 +1394,17 @@ def make_report(out, wb_path, zpath, db_path=None):
         if not err_counts:
             f.write("(On Error なし)\n")
 
+        # コメントアウトされたプロシージャ（デッドコードの証拠）
+        f.write("\n## コメントアウトされたプロシージャ（デッドコード候補）\n\n")
+        commented = False
+        for mname, ftype, code in vba_mods:
+            names = commented_out(code)
+            if names:
+                commented = True
+                f.write(f"- `{mname}`: {', '.join(names)}\n")
+        if not commented:
+            f.write("(なし)\n")
+
         f.write("\n## メッセージ一覧 (MsgBox)\n\n")
         msgs = []
         for mname, ftype, code in vba_mods:
@@ -1385,6 +1491,34 @@ def make_report(out, wb_path, zpath, db_path=None):
             f.write(f"### {sh}\n")
             for r in sorted(refs[sh]):
                 f.write(f"- `{r}`\n")
+
+        f.write("\n## VBAから参照されているセル\n\n")
+        for mname, ftype, code in vba_mods:
+            for p in module_procs[mname][1]:
+                info = analyze_proc(p, proc_names, sheet_names, code_names)
+                if info["ranges"]:
+                    f.write(f"- `{mname}.{p['signature'][2]}`: " +
+                            ", ".join(sorted(set(info["ranges"]))) + "\n")
+
+        f.write("\n## 列マッピング候補（配列インデックス = シート列 0始まり）\n\n")
+        f.write("`二次元配列(w行, N) = ![フィールド]` のNとシート列(A=0,B=1,...)の対応から、")
+        f.write("「DBカラム ↔ シート列」のマップを復元する（取り込み=DB/セル→シート、セット=シート→DB）。\n")
+        f.write("同一列の取り込み・セットの対応を突き合わせ、シート列の意味を確定する。\n\n")
+        for mname, ftype, code in vba_mods:
+            for p in module_procs[mname][1]:
+                in_rows, out_rows = vba_column_maps("\n".join(p["body"]))
+                if not in_rows and not out_rows:
+                    continue
+                f.write(f"### {mname}.{p['signature'][2]}\n")
+                if in_rows:
+                    f.write("\n| シート列 | 配列index | 取得元(取り込み: DB/セル→シート) |\n|---|---|---|\n")
+                    for r in sorted(in_rows, key=lambda x: x["index"]):
+                        f.write(f"| {r['col']} | {r['index']} | {r['src']} |\n")
+                if out_rows:
+                    f.write("\n| DBフィールド | 書き込み元(セット: シート→DB) |\n|---|---|\n")
+                    for r in out_rows:
+                        f.write(f"| {r['field']} | {r['src']} |\n")
+                f.write("\n")
 
         f.write("\n## シート間の数式参照\n\n")
         for i, (name, sid, rid) in enumerate(sheets, 1):
