@@ -747,6 +747,7 @@ def write_db_report(out, db_path, vba_mods):
     tables = report["tables"]
     refs = report["vba"]
     total_rows = sum(t["rows"] for t in tables.values())
+    data_rows = sum(tables[t]["rows"] for t in tables if "採番" not in t)
     table_cols = {t: set(d["columns"].keys()) for t, d in tables.items() if "columns" in d}
 
     L = []
@@ -756,8 +757,9 @@ def write_db_report(out, db_path, vba_mods):
     L.append(f"- ユーザーテーブル数: {len(tables)}")
     L.append(f"- クエリ数: {len(report['queries'])}")
     L.append(f"- 全行数: {total_rows}")
-    if tables and total_rows == 0:
-        L.append("- **判定: 全テーブル0行の初期テンプレート状態。実運用DBのスキーマと突き合わせが必要**")
+    L.append(f"- 実データ行数(採番テーブル除く): {data_rows}")
+    if tables and data_rows == 0:
+        L.append("- **判定: 実データ0行の初期テンプレート状態。実運用DBのスキーマと突き合わせが必要**")
     L.append("")
 
     L.append("## テーブル定義\n")
