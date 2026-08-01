@@ -69,33 +69,76 @@ cp -r "$TMP/repo/$SKILL_REL" "$DEST"
 echo "     配置先: $DEST"
 
 # ---- Python 依存 ----
+PY3="$(command -v python3)"
+VENV_PY=""
+
+# pip を介した導入を試行する（PEP668環境は --break-system-packages にフォールバック）
+pip_install() {
+  if "$PY3" -m pip install --quiet "$@" 2>/dev/null; then
+    return 0
+  fi
+  "$PY3" -m pip install --quiet --break-system-packages "$@" 2>/dev/null
+}
+
 DEPS="$CORE_DEPS"
 if [ "$SKIP_DEPS" = "1" ]; then
   echo "[2/3] 依存の導入をスキップ"
 else
   echo "[2/3] Python 依存を導入中: $DEPS"
-  if ! python3 -m pip install --quiet $DEPS 2>/dev/null; then
-    echo "     標準インストールに失敗 → --break-system-packages で再試行"
-    python3 -m pip install --quiet --break-system-packages $DEPS || {
-      echo "[NG] 依存の導入に失敗しました"
-      echo "     sudo apt install python3-pip などで pip を準備して再実行してください"
-      exit 1
-    }
+  DEP_OK=0
+
+  # 1) 既存の pip
+  if "$PY3" -m pip --version >/dev/null 2>&1; then
+    if pip_install $DEPS; then DEP_OK=1; fi
+  fi
+
+  # 2) pip 自体が無い → get-pip.py でユーザー領域にブートストラップ
+  if [ "$DEP_OK" = "0" ] && command -v curl >/dev/null 2>&1; then
+    echo "     pip が見つかりません → get-pip.py でブートストラップを試行"
+    GETTMP="$(mktemp -d)"
+    if curl -fsSL https://bootstrap.pypa.io/get-pip.py -o "$GETTMP/get-pip.py" 2>/dev/null \
+       && "$PY3" "$GETTMP/get-pip.py" --user --break-system-packages >/dev/null 2>&1 \
+       && pip_install --user $DEPS; then
+      DEP_OK=1
+    fi
+    rm -rf "$GETTMP"
+  fi
+
+  # 3) ユーザー領域も不可 → スキル内 .venv を作成して導入（extract.py が自動利用）
+  if [ "$DEP_OK" = "0" ]; then
+    echo "     ユーザー領域への導入に失敗 → スキル内 .venv を試行"
+    if "$PY3" -m venv "$DEST/.venv" >/dev/null 2>&1; then
+      if "$DEST/.venv/bin/python3" -m pip install --quiet $DEPS 2>/dev/null; then
+        DEP_OK=1
+        VENV_PY="$DEST/.venv/bin/python3"
+        echo "     導入先: $DEST/.venv（extract.py が自動で使用します）"
+      else
+        rm -rf "$DEST/.venv"
+      fi
+    fi
+  fi
+
+  if [ "$DEP_OK" != "1" ]; then
+    echo "[NG] 依存の導入に失敗しました"
+    echo "     sudo apt install python3-pip python3-venv を導入して再実行してください"
+    echo "       （または手動で: python3 -m pip install openpyxl oletools access_parser）"
+    exit 1
   fi
 fi
 
 # ---- 検証 ----
+VCHECK="${VENV_PY:-$PY3}"
 if [ "$NO_CHECK" = "1" ]; then
   echo "[3/3] 検証をスキップ"
 else
   echo "[3/3] 検証中..."
-  if python3 -c "import openpyxl, oletools" 2>/dev/null; then
+  if "$VCHECK" -c "import openpyxl, oletools" 2>/dev/null; then
     echo "     openpyxl / oletools: OK"
   else
     echo "     [warn] import に失敗しました（依存導入の失敗が考えられます）"
-    python3 -m pip list 2>/dev/null | grep -iE "openpyxl|oletools" || true
+    "$VCHECK" -m pip list 2>/dev/null | grep -iE "openpyxl|oletools" || true
   fi
-  if python3 -c "import access_parser" 2>/dev/null; then
+  if "$VCHECK" -c "import access_parser" 2>/dev/null; then
     echo "     access_parser: OK"
   else
     echo "     [warn] access_parser の import に失敗しました"

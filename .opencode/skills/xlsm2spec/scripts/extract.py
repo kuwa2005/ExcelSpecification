@@ -87,6 +87,27 @@ EVENT_SUFFIXES = (
 )
 
 
+def _bootstrap_venv():
+    """pip無し環境向け: スキル同梱の .venv が無く依存も未導入なら、自身をvenvのPythonで再実行する。
+    install.sh が pip を導入できなかった場合に `$DEST/.venv` を作るため、
+    `python3 <スキル>/scripts/extract.py` の呼び出し方のままで動作させるための仕組み。"""
+    try:
+        import openpyxl  # noqa: F401
+        import oletools  # noqa: F401
+        return
+    except Exception:
+        pass
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    for cand in (os.path.join(script_dir, ".venv"),
+                 os.path.join(script_dir, "..", ".venv")):
+        py = os.path.join(cand, "bin", "python3")
+        if os.path.isfile(py):
+            os.execv(py, [py] + sys.argv)
+
+
+_bootstrap_venv()
+
+
 def log(msg):
     sys.stderr.write("[extract] %s\n" % msg)
 

@@ -12,6 +12,7 @@ curl -fsSL -H "Accept: application/vnd.github.raw" https://api.github.com/repos/
 
 - スキルをグローバル（`~/.config/opencode/skills/`）に配置します
 - openpyxl / oletools / access_parser を自動導入します（Access DB連携ツールもデフォルトで解析可能）
+- `pip` が無い環境でも、get-pip.py → スキル内 `.venv` の順で自動フォールバックして導入します
 
 - 特定プロジェクトだけで使う場合:
 
@@ -151,6 +152,7 @@ cp -r ExcelSpecification/.opencode/skills/xlsm2spec ~/.config/opencode/skills/
 | 症状 | 対処 |
 |---|---|
 | スキルが認識されない | `~/.config/opencode/skills/xlsm2spec/SKILL.md` の存在と、ファイル名が `SKILL.md`（大文字）であることを確認。opencode を完全終了して再起動 |
-| `import openpyxl` が失敗する | `pip install openpyxl oletools` を再実行。環境が externally-managed の場合は `--break-system-packages` を付与 |
+| `No module named pip` | 一発インストールが get-pip.py → `.venv` の順に自動導入を試みます。それでも失敗する場合は `sudo apt install python3-pip python3-venv` を導入して再実行 |
+| `import openpyxl` が失敗する | `pip install openpyxl oletools` を再実行。環境が externally-managed の場合は `--break-system-packages` を付与。スキル内 `.venv` がある場合は `python3 <スキル>/scripts/extract.py` が自動で `.venv` を使う |
 | 抽出スクリプトがエラー | `python3 -c "import openpyxl, oletools"` で依存を確認。VBA解析は `oletools` が必須 |
 | DB（.accdb）が読めない | `pip install access_parser` を実行 |

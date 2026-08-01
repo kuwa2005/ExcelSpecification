@@ -39,6 +39,7 @@ curl -fsSL -H "Accept: application/vnd.github.raw" https://api.github.com/repos/
 ```
 
 - スキルをグローバル（`~/.config/opencode/skills/`）に配置し、Python依存（openpyxl / oletools / access_parser）も導入します
+- `pip` が無い環境でも get-pip.py → スキル内 `.venv` の順で自動導入します
 - Access DB（.accdb/.mdb）連携ツールも**デフォルトで解析可能**です（`--db` で実スキーマを検証）
 - **同じコマンドを再実行すると最新版へアップデート**されます
 
