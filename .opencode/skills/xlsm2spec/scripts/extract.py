@@ -13,8 +13,10 @@ Excel(.xlsm)を解析し、AIが仕様化分析に使える中間成果物(Markd
     30_buttons.md              ... ボタン→マクロ割当一覧
     40_cross_references.md     ... VBAとシート/DBのクロス参照
     sheets/<n>_<name>.md       ... シートごとの構造詳細
+    50_db_schema.md            ... Access DBスキーマ検証 (--db 指定時)
 
 依存: openpyxl, oletools (pip install openpyxl oletools)
+DB解析時: access_parser (pip install access_parser)
 """
 import argparse
 import io
@@ -623,7 +625,215 @@ def guess_type(h1, h2, vals):
     return "文字列"
 
 
-def make_report(out, wb_path, zpath):
+def db_type_name(vals):
+    """カラムの値リストから型を推定する。"""
+    types = sorted(set(type(v).__name__ for v in vals if v is not None))
+    if any(t in ("datetime", "date") for t in types):
+        return "日付/時刻"
+    if "int" in types and not any(t in ("float", "decimal", "Decimal") for t in types):
+        return "整数"
+    if any(t in ("float", "decimal", "Decimal") for t in types):
+        return "数値"
+    if "bool" in types:
+        return "真偽"
+    if any(t in ("bytes", "bytearray") for t in types):
+        return "バイナリ"
+    if "str" in types:
+        return "文字列"
+    return ",".join(types) if types else "-"
+
+
+def db_sample_vals(vals, limit=3, maxlen=40):
+    out = []
+    for v in vals:
+        if v is None:
+            continue
+        if isinstance(v, bytes):
+            s = "<bytes %d>" % len(v)
+        else:
+            s = str(v)
+        if len(s) > maxlen:
+            s = s[:maxlen] + "..."
+        out.append(s)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def db_select_cols(sel):
+    """SQLのSELECT列リスト文字列から列名候補を抽出する。"""
+    out = []
+    for item in sel.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        if item == "*":
+            out.append("*")
+            continue
+        item = re.split(r"\s+AS\s+", item, flags=re.IGNORECASE)[0].strip()
+        ids = re.findall(r"[A-Za-z0-9_\u3000-\u9fff]+", item)
+        if not ids:
+            continue
+        col = ids[-1]
+        if col.upper() in ("DISTINCT", "TOP", "ALL", "PERCENT", "FROM"):
+            continue
+        out.append(col)
+    return out
+
+
+def collect_vba_db_refs(vba_mods):
+    """VBAからDBへの参照(T_/Q_テーブル名, ![カラム], SELECT列)を収集する。"""
+    table_refs = Counter()
+    col_refs = Counter()
+    sql_select = []
+    for mname, ftype, code in vba_mods:
+        for m in re.finditer(r'["\']([TQ]_[A-Za-z0-9_\u3000-\u9fff]+)', code):
+            table_refs[m.group(1)] += 1
+        for m in re.finditer(r'!\[([^\]\[]+)\]', code):
+            col_refs[m.group(1).strip()] += 1
+        for m in re.finditer(r"\bSELECT\s+([^;\"']*?)\s+FROM\s+([A-Za-z0-9_\u3000-\u9fff]+)",
+                             code, re.IGNORECASE):
+            sql_select.append((mname, m.group(2), db_select_cols(m.group(1))))
+    return {"tables": table_refs, "columns": col_refs, "sql": sql_select}
+
+
+def analyze_access_db(db_path, vba_mods):
+    """access_parserでDBスキーマを検証し、VBA参照と突き合わせたMarkdownを返す。"""
+    try:
+        from access_parser import AccessParser
+    except ImportError:
+        return None
+    db = AccessParser(db_path)
+    catalog = db.catalog
+    user_tables = [t for t in catalog
+                   if not t.startswith("MSys") and not t.startswith("f_")
+                   and not t.startswith("MSysObjects")]
+    queries = []
+    try:
+        mo = db.parse_table("MSysObjects")
+        for t, n in zip(mo.get("Type", []), mo.get("Name", [])):
+            if t == 5:
+                queries.append(n)
+    except Exception:
+        pass
+    tables = {}
+    for t in sorted(user_tables):
+        try:
+            tbl = db.parse_table(t)
+        except Exception as e:
+            tables[t] = {"error": str(e), "columns": {}, "rows": 0}
+            continue
+        cols = {}
+        for c, vals in tbl.items():
+            cols[c] = {"type": db_type_name(vals),
+                       "nonnull": sum(1 for v in vals if v is not None),
+                       "samples": db_sample_vals(vals)}
+        tables[t] = {"columns": cols,
+                     "rows": max((len(v) for v in tbl.values()), default=0)}
+    return {"path": db_path, "tables": tables, "queries": queries,
+            "vba": collect_vba_db_refs(vba_mods)}
+
+
+def write_db_report(out, db_path, vba_mods):
+    """DBスキーマ検証レポート 50_db_schema.md を書き出す。"""
+    report = analyze_access_db(db_path, vba_mods)
+    if report is None:
+        with open(os.path.join(out, "50_db_schema.md"), "w", encoding="utf-8") as f:
+            f.write("# DBスキーマ検証\n\n")
+            f.write("`access_parser` が未導入のためDB解析をスキップしました。\n")
+            f.write("`pip install access_parser` で導入後、`--db` を付けて再実行してください。\n")
+        return
+
+    tables = report["tables"]
+    refs = report["vba"]
+    total_rows = sum(t["rows"] for t in tables.values())
+    table_cols = {t: set(d["columns"].keys()) for t, d in tables.items() if "columns" in d}
+
+    L = []
+    L.append("# DBスキーマ検証\n")
+    L.append("")
+    L.append(f"- DBファイル: `{os.path.basename(db_path)}`")
+    L.append(f"- ユーザーテーブル数: {len(tables)}")
+    L.append(f"- クエリ数: {len(report['queries'])}")
+    L.append(f"- 全行数: {total_rows}")
+    if tables and total_rows == 0:
+        L.append("- **判定: 全テーブル0行の初期テンプレート状態。実運用DBのスキーマと突き合わせが必要**")
+    L.append("")
+
+    L.append("## テーブル定義\n")
+    if not tables:
+        L.append("(ユーザーテーブルなし)\n")
+    for t, d in tables.items():
+        L.append(f"### {t} ({d['rows']}行)\n")
+        if d.get("error"):
+            L.append(f"- 解析エラー: {d['error']}\n")
+            continue
+        L.append("| カラム | 型 | 非NULL数 | サンプル値 |")
+        L.append("|---|---|---|---|")
+        for c, ci in d["columns"].items():
+            L.append(f"| {c} | {ci['type']} | {ci['nonnull']} | {', '.join(ci['samples']) or '-'} |")
+        L.append("")
+
+    L.append("## クエリ一覧\n")
+    if report["queries"]:
+        for q in sorted(report["queries"]):
+            L.append(f"- `{q}`")
+    else:
+        L.append("(クエリなし)")
+    L.append("")
+
+    L.append("## VBAとの突き合わせ\n")
+    L.append("### VBAが参照するテーブル/クエリ\n")
+    referenced = set(refs["tables"].keys())
+    for t, cnt in refs["tables"].most_common():
+        if t.startswith("Q_"):
+            exists = "存在" if t in report["queries"] else "**不在 (C15)**"
+        else:
+            exists = "存在" if t in tables else "**不在 (C15)**"
+        L.append(f"- `{t}` ({cnt}回) → {exists}")
+    if not referenced:
+        L.append("(VBAからDBテーブル参照なし)")
+    L.append("")
+
+    dormant = [t for t in sorted(tables) if t not in referenced]
+    L.append("### VBAから未参照のテーブル（休眠機能の手がかり C19）\n")
+    if dormant:
+        for t in dormant:
+            L.append(f"- `{t}`")
+    else:
+        L.append("(なし)")
+    L.append("")
+
+    L.append("### カラム存在チェック（VBAの `![カラム]` 参照）\n")
+    L.append("| 参照カラム | 参照回数 | マッチするテーブル |")
+    L.append("|---|---|---|")
+    for col, cnt in refs["columns"].most_common():
+        matched = [t for t, cs in table_cols.items() if col in cs]
+        if matched:
+            L.append(f"| {col} | {cnt} | {', '.join(sorted(matched))} |")
+        else:
+            L.append(f"| {col} | {cnt} | **該当なし (C15/C20)** |")
+    if not refs["columns"]:
+        L.append("| - | - | (参照なし) |")
+    L.append("")
+
+    L.append("### SQLのSELECT列と実カラムの比較\n")
+    for mname, t, cols in refs["sql"]:
+        real = table_cols.get(t)
+        if real is None:
+            L.append(f"- `{mname}`: `FROM {t}` → **テーブルが実DBに無い (C15)**")
+            continue
+        missing = [c for c in cols if c != "*" and c not in real]
+        if missing:
+            L.append(f"- `{mname}`: SELECT ... FROM `{t}` → 実DBに無い列: {missing}")
+    if not refs["sql"]:
+        L.append("(SELECT文の検出なし)")
+
+    with open(os.path.join(out, "50_db_schema.md"), "w", encoding="utf-8") as f:
+        f.write("\n".join(L) + "\n")
+
+
+def make_report(out, wb_path, zpath, db_path=None):
     os.makedirs(out, exist_ok=True)
     sheets_dir = os.path.join(out, "sheets")
     vba_dir = os.path.join(out, "vba")
@@ -886,6 +1096,11 @@ def make_report(out, wb_path, zpath):
         with open(os.path.join(sheets_dir, "%02d_%s.md" % (i, safe)), "w", encoding="utf-8") as f:
             f.write(content)
 
+    # ---- DBスキーマ検証 ----
+    if db_path:
+        log("DBスキーマを解析中: %s" % db_path)
+        write_db_report(out, db_path, vba_mods)
+
     wb.close()
     return True
 
@@ -908,6 +1123,8 @@ def main():
     ap = argparse.ArgumentParser(description="xlsm解析・中間成果物抽出")
     ap.add_argument("xlsm", help="解析対象の.xlsmファイル")
     ap.add_argument("-o", "--out", default=".", help="出力先ディレクトリ")
+    ap.add_argument("--db", metavar="DB", default=None,
+                    help="Access DB (.accdb/.mdb) のパス。スキーマ検証レポート(50_db_schema.md)を出力")
     args = ap.parse_args()
 
     if not os.path.isfile(args.xlsm):
@@ -915,6 +1132,9 @@ def main():
         sys.exit(1)
     if not args.xlsm.lower().endswith((".xlsm", ".xlam", ".xlsb")):
         log("注意: 対象が.xlsm以外です。動作は保証されません。")
+    if args.db and not os.path.isfile(args.db):
+        log("エラー: DBファイルがありません: %s" % args.db)
+        sys.exit(1)
     try:
         import openpyxl  # noqa
     except ImportError:
@@ -922,7 +1142,7 @@ def main():
         sys.exit(1)
 
     warnings.filterwarnings("ignore")
-    ok = make_report(args.out, args.xlsm, args.xlsm)
+    ok = make_report(args.out, args.xlsm, args.xlsm, args.db)
     if ok:
         log("完了。出力: %s" % os.path.abspath(args.out))
     else:
