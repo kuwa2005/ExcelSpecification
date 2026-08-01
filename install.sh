@@ -2,7 +2,7 @@
 #
 # xlsm2spec skill installer
 #
-#   curl -fsSL https://cdn.jsdelivr.net/gh/kuwa2005/ExcelSpecification@main/install.sh | bash
+#   curl -fsSL -H "Accept: application/vnd.github.raw" https://api.github.com/repos/kuwa2005/ExcelSpecification/contents/install.sh | bash
 #
 # options:
 #   --project <dir>   プロジェクト単位でインストール (<dir>/.opencode/skills)
@@ -146,6 +146,6 @@ cat <<'TUTORIAL'
       python3 <スキル>/scripts/extract.py <対象.xlsm> -o <作業ディレクトリ>
 
 ⑤ Access DB (.accdb) 連携ツールの場合は --with-db で再インストール
-      curl -fsSL https://cdn.jsdelivr.net/gh/kuwa2005/ExcelSpecification@main/install.sh | bash -s -- --with-db
+      curl -fsSL -H "Accept: application/vnd.github.raw" https://api.github.com/repos/kuwa2005/ExcelSpecification/contents/install.sh | bash -s -- --with-db
 ────────────────────────────────────────
 TUTORIAL

@@ -35,20 +35,20 @@ pip install openpyxl oletools access_parser
 ### 一発インストール（推奨）
 
 ```bash
-curl -fsSL https://cdn.jsdelivr.net/gh/kuwa2005/ExcelSpecification@main/install.sh | bash
+curl -fsSL -H "Accept: application/vnd.github.raw" https://api.github.com/repos/kuwa2005/ExcelSpecification/contents/install.sh | bash
 ```
 
 - スキルをグローバル（`~/.config/opencode/skills/`）に配置し、Python依存（openpyxl / oletools）も導入します
 - Access DB連携ツールを解析する場合は `--with-db` を付与
 
 ```bash
-curl -fsSL https://cdn.jsdelivr.net/gh/kuwa2005/ExcelSpecification@main/install.sh | bash -s -- --with-db
+curl -fsSL -H "Accept: application/vnd.github.raw" https://api.github.com/repos/kuwa2005/ExcelSpecification/contents/install.sh | bash -s -- --with-db
 ```
 
 - 特定プロジェクトだけで使う場合は `--project <dir>` を付与
 
 ```bash
-curl -fsSL https://cdn.jsdelivr.net/gh/kuwa2005/ExcelSpecification@main/install.sh | bash -s -- --project ./myproject
+curl -fsSL -H "Accept: application/vnd.github.raw" https://api.github.com/repos/kuwa2005/ExcelSpecification/contents/install.sh | bash -s -- --project ./myproject
 ```
 
 ### 手動インストール
